@@ -1,0 +1,5 @@
+{
+  "name": "Math Architect",
+  "description": "An advanced pedagogical engine powered by Gemini to construct rigorous, high-level mathematics problems.",
+  "requestFramePermissions": []
+}
