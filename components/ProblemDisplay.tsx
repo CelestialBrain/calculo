@@ -107,12 +107,12 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
                 <MarkdownRenderer content={data.solution} />
             </div>
 
-            {/* 4. Final Answer - Centered & Prominent */}
+            {/* 4. Final Answer - Simple Textbook Box */}
             {data.finalResult && (
-                <div className="mt-16 flex flex-col items-center justify-center animate-fade-in">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Final Result</span>
-                    <div className="inline-block px-12 py-8 bg-white border-2 border-slate-900 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
-                        <div className="text-3xl font-bold text-slate-900">
+                <div className="mt-8 pt-8 border-t border-slate-100 flex justify-center">
+                    <div className="inline-flex flex-col items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Answer</span>
+                        <div className="px-8 py-4 bg-slate-50 border border-slate-200 rounded-lg text-xl font-bold text-slate-900 min-w-[200px] text-center">
                              <MarkdownRenderer content={data.finalResult} />
                         </div>
                     </div>

@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import InputForm from './components/InputForm';
 import ProblemDisplay from './components/ProblemDisplay';
 import ReasoningSidebar from './components/ReasoningSidebar';
+import HistorySidebar from './components/HistorySidebar';
 import { generateProblem, generateProblemImage } from './services/gemini';
-import { MathProblemState, AppStatus, FileData, GeneratedImage } from './types';
-import { Calculator, Image as ImageIcon, RotateCcw, AlertCircle } from 'lucide-react';
+import { MathProblemState, AppStatus, FileData, GeneratedImage, HistoryItem } from './types';
+import { Calculator, Image as ImageIcon, RotateCcw, AlertCircle, Clock } from 'lucide-react';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [error, setError] = useState<string | null>(null);
   const [problemData, setProblemData] = useState<MathProblemState | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+  
+  // History State
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('math_architect_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Save history to local storage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('math_architect_history', JSON.stringify(history));
+  }, [history]);
 
   const parseGeminiResponse = (text: string): MathProblemState => {
     // Helper to extract sections safely, supporting both ## and ###
@@ -32,7 +49,6 @@ const App: React.FC = () => {
         problem: extractSection(`${H}\\s*(?:Generated Problem|Problem Statement)`, `${H}\\s*Difficulty`),
         difficultyAnalysis: extractSection(`${H}\\s*Difficulty(?: Analysis)?`, `${H}\\s*Step-by-Step`),
         solution: extractSection(`${H}\\s*(?:Step-by-Step Solution|Comprehensive Solution)`, `${H}\\s*Final Answer`),
-        // New explicit field for the boxed answer
         finalResult: extractSection(`${H}\\s*Final Answer`, `${H}\\s*Visualization`),
         pythonCode: cleanCode(extractSection(`${H}\\s*Visualization(?: Code)?`, '$')),
         rawResponse: text,
@@ -44,12 +60,23 @@ const App: React.FC = () => {
     setError(null);
     setProblemData(null);
     setGeneratedImage(null);
+    setShowHistory(false); // Close history if open
 
     try {
       const rawText = await generateProblem(topic, files);
       const parsedData = parseGeminiResponse(rawText);
       setProblemData(parsedData);
       setStatus(AppStatus.SUCCESS);
+
+      // Add to History
+      const newItem: HistoryItem = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        topic: topic.trim() || "Untitled Math Problem",
+        data: parsedData
+      };
+      setHistory(prev => [newItem, ...prev]);
+
     } catch (e: any) {
       setError(e.message || "Failed to generate problem.");
       setStatus(AppStatus.ERROR);
@@ -70,6 +97,18 @@ const App: React.FC = () => {
       }
   };
 
+  const restoreFromHistory = (item: HistoryItem) => {
+    setProblemData(item.data);
+    setStatus(AppStatus.SUCCESS);
+    setGeneratedImage(null); // Reset image as it's not stored in history
+    setError(null);
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem('math_architect_history');
+  };
+
   const resetApp = () => {
       setStatus(AppStatus.IDLE);
       setProblemData(null);
@@ -80,10 +119,26 @@ const App: React.FC = () => {
   const isReasoning = status === AppStatus.GENERATING_PROBLEM;
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-[#1C1C1E] selection:bg-blue-100 selection:text-blue-900 pb-20 overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-[#F5F5F7] text-[#1C1C1E] selection:bg-blue-100 selection:text-blue-900 pb-20 overflow-x-hidden font-sans relative">
       
-      {/* Reasoning Sidebar - Only visible when generating */}
+      {/* Sidebars */}
       <ReasoningSidebar isVisible={isReasoning} />
+      <HistorySidebar 
+        isOpen={showHistory} 
+        onClose={() => setShowHistory(false)} 
+        history={history}
+        onSelect={restoreFromHistory}
+        onClear={clearHistory}
+      />
+
+      {/* History Toggle Button (Absolute Top Left) */}
+      <button 
+        onClick={() => setShowHistory(true)}
+        className={`fixed top-6 left-6 z-30 p-3 bg-white border border-slate-200 shadow-md rounded-full text-slate-500 hover:text-[#007AFF] hover:scale-105 transition-all duration-300 ${isReasoning ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        title="View History"
+      >
+        <Clock size={20} />
+      </button>
 
       <div className={`relative z-10 max-w-5xl mx-auto px-4 md:px-6 transition-all duration-500 ease-out ${isReasoning ? 'mr-72 opacity-40 pointer-events-none blur-[2px]' : ''}`}>
         

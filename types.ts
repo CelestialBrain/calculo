@@ -7,6 +7,13 @@ export interface MathProblemState {
   rawResponse: string | null;
 }
 
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  topic: string;
+  data: MathProblemState;
+}
+
 export interface GeneratedImage {
   url: string;
   loading: boolean;
