@@ -15,15 +15,6 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
   const [showPython, setShowPython] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  // Attempt to extract the final answer for the "Boxed" UI
-  const extractFinalAnswer = (text: string | null) => {
-    if (!text) return null;
-    const match = text.match(/\\boxed\{([^}]+)\}/);
-    return match ? match[1] : null;
-  };
-
-  const finalAnswer = extractFinalAnswer(data.solution);
-
   const handleCopy = async () => {
     if (!data.solution) return;
     try {
@@ -117,17 +108,12 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
             </div>
 
             {/* 4. Final Answer - Centered & Prominent */}
-            {finalAnswer && (
+            {data.finalResult && (
                 <div className="mt-16 flex flex-col items-center justify-center animate-fade-in">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Final Result</span>
                     <div className="inline-block px-12 py-8 bg-white border-2 border-slate-900 rounded-xl shadow-2xl transform hover:scale-105 transition-transform duration-300">
                         <div className="text-3xl font-bold text-slate-900">
-                             <ReactMarkdown 
-                                remarkPlugins={[remarkMath]} 
-                                rehypePlugins={[rehypeKatex]}
-                             >
-                                 {`$${finalAnswer}$`}
-                             </ReactMarkdown>
+                             <MarkdownRenderer content={data.finalResult} />
                         </div>
                     </div>
                 </div>

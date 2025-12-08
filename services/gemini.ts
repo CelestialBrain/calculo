@@ -1,53 +1,45 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { FileData } from "../types";
 
-const SYSTEM_INSTRUCTION = `
+// --- SYSTEM INSTRUCTIONS ---
+
+const ANALYST_INSTRUCTION = `
+You are a Senior Mathematical Analyst. 
+Your task is to analyze the provided input material (files, images, text) and extract the core mathematical concepts, identify the base difficulty level, and list any specific constraints or variables found. 
+Output a concise summary.
+`;
+
+const ARCHITECT_INSTRUCTION = `
 ### ROLE
-You are the "Math Architect," an advanced pedagogical engine designed to construct high-level, rigorous, and solvable mathematics problems.
-
-### INPUT DATA
-1. TOPIC
-2. CONTEXT MATERIAL
-3. REQUEST
-
-### OPERATIONAL WORKFLOW
-1. **Analysis:** Determine Base Difficulty and Concepts.
-2. **Synthesis:** Create a problem 1.5x harder.
-3. **Verification:** Ensure solvability.
+You are the "Math Architect," designed to construct high-level, rigorous, and solvable mathematics problems based on an analyst's report.
 
 ### OUTPUT FORMATTING RULES (STRICT)
-You must structure your response to be "scannable." Avoid long paragraphs. Use lists and spacing.
-
-1.  **Structure:** Use the EXACT headers defined in the template below for the parsing engine.
-2.  **No \`**\` Delimiters:** Do NOT use double asterisks for bolding headers. Use Markdown headers (###) for subsections like "Problem Statement" or "Step 1".
-3.  **The "Given" Section:** Always list known variables as a bulleted list.
-4.  **Display Math:** Use \`$$\` delimiters for ALL major equations so they appear centered and distinct. Do not squash complex math inline.
-5.  **Final Answer:** Must be enclosed in \`\\boxed{}\` within display math block.
+1. **Structure:** Use the EXACT headers defined in the template below.
+2. **Formatting:** Use lists for 'Given' variables.
+3. **Math:** Use \`$$\` delimiters for ALL major equations (display math).
+4. **Final Answer:** Must be enclosed in \`\\boxed{}\` within a display math block.
 
 ### RESPONSE TEMPLATE
-You must strictly follow this Markdown structure:
-
 ---
 ## Generated Problem
 ### Problem Statement
-[Brief intro sentence]
-* $variable_1 = value$
-* $variable_2 = value$
+[Intro sentence]
+* $var = val$
 
-**Goal:** [Brief objective]
+**Goal:** [Objective]
 
 ## Difficulty Analysis
-[Brief explanation of concepts combined]
+[Brief explanation]
 
 ## Step-by-Step Solution
-### Step 1: [Name of Step]
-[Short explanation]
+### Step 1: [Name]
+[Text]
 $$
 [Equation]
 $$
 
-### Step 2: [Name of Step]
-[Short explanation]
+### Step 2: [Name]
+[Text]
 $$
 [Equation]
 $$
@@ -58,9 +50,50 @@ $$
 $$
 
 ## Visualization Code (Python)
-[Python code if applicable]
+[Python code if applicable, otherwise omit]
 ---
 `;
+
+// --- HELPER FUNCTIONS ---
+
+const getAnalystSummary = async (topic: string, files: FileData[], ai: GoogleGenAI): Promise<string> => {
+    // Step 1: The Analyst (Cost-Optimized via Flash model)
+    // Uses gemini-2.5-flash to read heavy context/files cheaply.
+    
+    if (files.length === 0 && !topic) return "No specific context provided. Generate a general problem.";
+
+    const prompt = `
+    TOPIC: ${topic || "Not specified"}
+    TASK: Analyze the attached materials. Identify:
+    1. Core Mathematical Topic & Concepts
+    2. Base Difficulty Level
+    3. Key Constraints / Variables
+    `;
+
+    const parts: any[] = [{ text: prompt }];
+    files.forEach(file => {
+        parts.unshift({
+            inlineData: { data: file.base64, mimeType: file.mimeType },
+        });
+    });
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts },
+            config: { 
+                systemInstruction: ANALYST_INSTRUCTION,
+                temperature: 0.5 
+            }
+        });
+        return response.text || "Analysis failed.";
+    } catch (e) {
+        console.warn("Analyst pass failed, proceeding with raw prompt.", e);
+        return "Analyst could not extract context. Proceed with raw user topic.";
+    }
+};
+
+// --- MAIN EXPORT ---
 
 export const generateProblem = async (
   topic: string,
@@ -68,37 +101,46 @@ export const generateProblem = async (
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
+  // 1. Run Analyst Pass
+  const analystSummary = await getAnalystSummary(topic, files, ai);
+
+  // 2. Run Architect Pass
+  // Using gemini-3-pro-preview for complex text synthesis.
+  // Note: Thinking budget is removed to optimize costs.
+  
   const userPrompt = `
-    TOPIC: ${topic || "General Mathematics based on context"}
-    REQUEST: Create Problem
-    
-    Please analyze the attached material (if any) and generate a rigorous problem following your system instructions.
-    Remember to use lists for given variables and display math ($$) for equations.
+    ### ANALYST REPORT
+    ${analystSummary}
+
+    ### USER REQUEST
+    TOPIC: ${topic || "See Analyst Report"}
+    TASK: Create a rigorous problem ~1.5x harder than the base difficulty identified in the report.
+    Ensure the problem is solvable and academically sound.
   `;
 
   const parts: any[] = [{ text: userPrompt }];
-
-  if (files && files.length > 0) {
-    files.forEach(file => {
-        parts.unshift({
-            inlineData: {
-              data: file.base64,
-              mimeType: file.mimeType,
-            },
-        });
-    });
-  }
+  
+  // We re-attach files to the Architect for deep reference if needed, 
+  // but the Analyst report guides the generation.
+  files.forEach(file => {
+      parts.unshift({
+          inlineData: {
+            data: file.base64,
+            mimeType: file.mimeType,
+          },
+      });
+  });
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-pro-preview", 
       contents: {
         parts: parts,
       },
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        thinkingConfig: { thinkingBudget: 1024 }, // Encourage deep reasoning
+        systemInstruction: ARCHITECT_INSTRUCTION,
         temperature: 0.7,
+        // thinkingConfig removed for cost optimization
       },
     });
 
@@ -113,6 +155,7 @@ export const generateProblemImage = async (problemDescription: string): Promise<
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
+        // Only called when user explicitly requests visualization
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: {
@@ -128,7 +171,6 @@ export const generateProblemImage = async (problemDescription: string): Promise<
             }
         });
         
-        // Extract image
         for (const part of response.candidates?.[0]?.content?.parts || []) {
             if (part.inlineData) {
                 return `data:image/png;base64,${part.inlineData.data}`;

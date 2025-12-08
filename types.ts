@@ -2,6 +2,7 @@ export interface MathProblemState {
   problem: string | null;
   difficultyAnalysis: string | null;
   solution: string | null;
+  finalResult: string | null;
   pythonCode: string | null;
   rawResponse: string | null;
 }

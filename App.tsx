@@ -13,21 +13,29 @@ const App: React.FC = () => {
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
 
   const parseGeminiResponse = (text: string): MathProblemState => {
-    const problemMatch = text.match(/## Generated Problem\s*([\s\S]*?)(?=## Difficulty Analysis|$)/i);
-    const difficultyMatch = text.match(/## Difficulty Analysis\s*([\s\S]*?)(?=## Step-by-Step Solution|$)/i);
-    const solutionMatch = text.match(/## Step-by-Step Solution\s*([\s\S]*?)(?=## Visualization Code|$)/i);
-    const codeMatch = text.match(/## Visualization Code.*?\s*([\s\S]*?)(?=$|---)/i);
+    // Helper to extract sections safely, supporting both ## and ###
+    const extractSection = (headerPattern: string, nextHeaderPattern: string) => {
+        const regex = new RegExp(`${headerPattern}\\s*([\\s\\S]*?)(?=${nextHeaderPattern}|$|### Visualization|## Visualization)`, 'i');
+        const match = text.match(regex);
+        return match ? match[1].trim() : null;
+    };
 
-    const cleanCode = (code: string) => {
+    // Clean code blocks
+    const cleanCode = (code: string | null) => {
+        if (!code) return null;
         return code.replace(/```python/g, '').replace(/```/g, '').trim();
     };
 
+    const H = '(?:###|##)';
+
     return {
-      problem: problemMatch ? problemMatch[1].trim() : "Could not parse problem.",
-      difficultyAnalysis: difficultyMatch ? difficultyMatch[1].trim() : null,
-      solution: solutionMatch ? solutionMatch[1].trim() : null,
-      pythonCode: codeMatch ? cleanCode(codeMatch[1]) : null,
-      rawResponse: text,
+        problem: extractSection(`${H}\\s*(?:Generated Problem|Problem Statement)`, `${H}\\s*Difficulty`),
+        difficultyAnalysis: extractSection(`${H}\\s*Difficulty(?: Analysis)?`, `${H}\\s*Step-by-Step`),
+        solution: extractSection(`${H}\\s*(?:Step-by-Step Solution|Comprehensive Solution)`, `${H}\\s*Final Answer`),
+        // New explicit field for the boxed answer
+        finalResult: extractSection(`${H}\\s*Final Answer`, `${H}\\s*Visualization`),
+        pythonCode: cleanCode(extractSection(`${H}\\s*Visualization(?: Code)?`, '$')),
+        rawResponse: text,
     };
   };
 
