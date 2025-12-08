@@ -1,5 +1,5 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { FileData, DebugMetrics } from "../types";
+import { GoogleGenAI, GenerateContentResponse, Type, Schema } from "@google/genai";
+import { FileData, DebugMetrics, Flashcard, GenerationMode, QuizQuestion, MathProblemState } from "../types";
 
 // --- SYSTEM INSTRUCTIONS ---
 
@@ -54,13 +54,6 @@ $$
 ---
 `;
 
-interface GenerateProblemResult {
-  text: string;
-  analystReport: string;
-  debugPrompt: string;
-  debugMetrics: DebugMetrics;
-}
-
 export interface DebugUpdate {
     analystReport?: string;
     debugPrompt?: string;
@@ -106,97 +99,187 @@ const getAnalystSummary = async (topic: string, files: FileData[], ai: GoogleGen
     }
 };
 
-// --- MAIN EXPORT ---
+const runArchitectMode = async (
+    ai: GoogleGenAI, 
+    analystSummary: string, 
+    topic: string, 
+    files: FileData[], 
+    difficulty: number
+) => {
+    let instructionOverride = "";
+    if (difficulty === 1) instructionOverride = "Create a problem of EQUAL difficulty. Focus on reinforcement and conceptual clarity.";
+    else if (difficulty === 2) instructionOverride = "Create a problem slightly harder (1.2x). Introduce one new constraint or minor twist.";
+    else if (difficulty === 3) instructionOverride = "Create a problem 1.5x HARDER. Combine concepts from different areas.";
+    else if (difficulty === 4) instructionOverride = "Create a significantly harder problem (2.0x). Require deep insight and multiple solution stages.";
+    else if (difficulty === 5) instructionOverride = "Create an OLYMPIAD-LEVEL problem. Require abstract proof, novel application, or exceptional problem-solving creativity.";
+    else instructionOverride = "Create a problem 1.5x HARDER."; 
 
-export const generateProblem = async (
-  topic: string,
-  files: FileData[],
-  onProgress?: (update: DebugUpdate) => void
-): Promise<GenerateProblemResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const startTime = Date.now();
+    const debugPrompt = `
+      ### ANALYST REPORT
+      ${analystSummary}
   
-  // Notify start
-  if (onProgress) onProgress({ model: 'gemini-2.5-flash (Analyst)' });
-
-  // 1. Run Analyst Pass
-  const analystSummary = await getAnalystSummary(topic, files, ai);
-  
-  // STREAM UPDATE: Analyst Report Ready
-  if (onProgress) {
-      onProgress({ 
-          analystReport: analystSummary,
-          model: 'gemini-3-pro-preview (Architect)' // Switching context
-      });
-  }
-
-  // 2. Run Architect Pass
-  // Using gemini-3-pro-preview for complex reasoning
-  
-  const debugPrompt = `
-    ### ANALYST REPORT
-    ${analystSummary}
-
-    ### USER REQUEST
-    TOPIC: ${topic || "See Analyst Report"}
-    TASK: Create a rigorous problem ~1.5x harder than the base difficulty identified in the report.
-    Ensure the problem is solvable and academically sound.
-  `;
-
-  // STREAM UPDATE: Architect Prompt Ready
-  if (onProgress) {
-      onProgress({ debugPrompt: debugPrompt });
-  }
-
-  const parts: any[] = [{ text: debugPrompt }];
-  
-  // We re-attach files to the Architect for deep reference if needed
-  files.forEach(file => {
-      parts.unshift({
-          inlineData: {
-            data: file.base64,
-            mimeType: file.mimeType,
-          },
-      });
-  });
-
-  try {
-    const modelName = "gemini-3-pro-preview";
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: modelName, 
-      contents: {
-        parts: parts,
-      },
-      config: {
-        systemInstruction: ARCHITECT_INSTRUCTION,
-        temperature: 0.7,
-      },
+      ### USER REQUEST
+      TOPIC: ${topic || "See Analyst Report"}
+      DIFFICULTY LEVEL: ${difficulty}/5
+      INSTRUCTION: ${instructionOverride}
+      TASK: Based on the instruction above, create a rigorous math problem.
+      Ensure the problem is solvable and academically sound.
+    `;
+    
+    const parts: any[] = [{ text: debugPrompt }];
+    files.forEach(file => {
+        parts.unshift({ inlineData: { data: file.base64, mimeType: file.mimeType } });
     });
 
-    const endTime = Date.now();
-    const latencyMs = endTime - startTime;
-    
-    // Extract metrics if available
-    const inputTokens = response.usageMetadata?.promptTokenCount || 0;
-    const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview', 
+        contents: { parts },
+        config: { systemInstruction: ARCHITECT_INSTRUCTION, temperature: 0.7 },
+    });
 
-    return {
-        text: response.text || "Error: No text generated.",
-        analystReport: analystSummary,
-        debugPrompt: debugPrompt,
-        debugMetrics: {
-            latencyMs,
-            inputTokens,
-            outputTokens,
-            model: modelName
+    return { text: response.text, prompt: debugPrompt, usage: response.usageMetadata };
+};
+
+const runFlashcardMode = async (ai: GoogleGenAI, analystSummary: string, topic: string) => {
+    const prompt = `
+    Based on the following analysis of a math topic, generate a comprehensive set of 5-8 flashcards.
+    Each card should capture a key concept, formula, or theorem identified in the analysis.
+    
+    ANALYST REPORT:
+    ${analystSummary}
+    
+    TOPIC FOCUS: ${topic}
+    `;
+
+    const schema: Schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                id: { type: Type.INTEGER },
+                front: { type: Type.STRING, description: "The concept name or term" },
+                back: { type: Type.STRING, description: "The definition, formula, or concise explanation" },
+                category: { type: Type.STRING, description: "The sub-topic (e.g. 'Calculus')" }
+            },
+            required: ["id", "front", "back", "category"]
         }
     };
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw error;
-  }
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            temperature: 0.3
+        }
+    });
+
+    return { text: response.text, prompt, usage: response.usageMetadata };
 };
+
+const runQuizMode = async (ai: GoogleGenAI, analystSummary: string, topic: string, difficulty: number) => {
+    const prompt = `
+    Generate a ${difficulty >= 4 ? 'challenging' : 'standard'} multiple-choice quiz (5 questions) based on the analysis below.
+    The questions should test deep understanding, not just memorization.
+    
+    ANALYST REPORT:
+    ${analystSummary}
+    
+    TOPIC: ${topic}
+    DIFFICULTY: ${difficulty}/5
+    `;
+
+    const schema: Schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                id: { type: Type.INTEGER },
+                question: { type: Type.STRING },
+                options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of 4 possible answers" },
+                correctAnswer: { type: Type.INTEGER, description: "Index of the correct answer (0-3)" },
+                explanation: { type: Type.STRING, description: "Explanation of why the answer is correct" }
+            },
+            required: ["id", "question", "options", "correctAnswer", "explanation"]
+        }
+    };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            temperature: 0.4
+        }
+    });
+
+    return { text: response.text, prompt, usage: response.usageMetadata };
+};
+
+// --- MAIN EXPORT ---
+
+export const generateMathContent = async (
+  topic: string,
+  files: FileData[],
+  difficulty: number,
+  mode: GenerationMode,
+  onProgress?: (update: DebugUpdate) => void
+): Promise<Partial<MathProblemState>> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const startTime = Date.now();
+  
+  // 1. Analyst Pass
+  if (onProgress) onProgress({ model: 'gemini-2.5-flash (Analyst)' });
+  const analystSummary = await getAnalystSummary(topic, files, ai);
+  
+  if (onProgress) {
+      onProgress({ 
+          analystReport: analystSummary,
+          model: mode === 'PROBLEM' ? 'gemini-3-pro-preview' : 'gemini-2.5-flash'
+      });
+  }
+
+  // 2. Branch based on Mode
+  let result;
+  let resultData: Partial<MathProblemState> = { mode, analystReport: analystSummary };
+
+  try {
+      if (mode === 'PROBLEM') {
+          result = await runArchitectMode(ai, analystSummary, topic, files, difficulty);
+          resultData.rawResponse = result.text;
+          resultData.debugPrompt = result.prompt;
+          // Note: Parsing logic handled in App.tsx
+      } else if (mode === 'FLASHCARDS') {
+          result = await runFlashcardMode(ai, analystSummary, topic);
+          resultData.flashcards = JSON.parse(result.text || "[]");
+          resultData.debugPrompt = result.prompt;
+      } else if (mode === 'QUIZ') {
+          result = await runQuizMode(ai, analystSummary, topic, difficulty);
+          resultData.quiz = JSON.parse(result.text || "[]");
+          resultData.debugPrompt = result.prompt;
+      }
+  } catch (error) {
+      console.error("Generation failed:", error);
+      throw error;
+  }
+
+  // Metrics
+  if (result) {
+      const endTime = Date.now();
+      resultData.debugMetrics = {
+          latencyMs: endTime - startTime,
+          inputTokens: result.usage?.promptTokenCount || 0,
+          outputTokens: result.usage?.candidatesTokenCount || 0,
+          model: mode === 'PROBLEM' ? 'gemini-3-pro-preview' : 'gemini-2.5-flash'
+      };
+  }
+
+  return resultData;
+};
+
+// ... existing helper functions (image gen, tutor) ...
 
 export const generateProblemImage = async (problemDescription: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -226,5 +309,83 @@ export const generateProblemImage = async (problemDescription: string): Promise<
     } catch (error) {
         console.error("Image Gen Error:", error);
         throw error;
+    }
+}
+
+export const explainMathStep = async (stepText: string, problemContext: string): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    CONTEXT (Full Problem & Solution):
+    ${problemContext}
+
+    CURRENT STEP TO EXPLAIN:
+    ${stepText}
+
+    TASK: Act as a friendly, expert math tutor. Explain the specific logic of the "Current Step" above in 1-2 simple, clear sentences.
+    - Focus on "Why" we performed this operation.
+    - Identify any specific rule or theorem used (e.g., Chain Rule, Pythagorean Identity).
+    - Do not re-derive the whole answer, just explain this specific transition.
+    `;
+
+    try {
+        // Use flash model for low latency tutor response
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: { temperature: 0.5 }
+        });
+        return response.text || "I couldn't generate an explanation for this step.";
+    } catch (error) {
+        console.error("Tutor Error:", error);
+        return "Sorry, I'm having trouble explaining this right now.";
+    }
+}
+
+// Keeping this for backward compatibility if needed, though runFlashcardMode replaces it generally
+export const generateFlashcards = async (problemContext: string): Promise<Flashcard[]> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const prompt = `
+    Analyze the following math problem and solution.
+    Identify 4-6 key concepts, theorems, formulas, or definitions that are critical to understanding this problem.
+    Create a flashcard for each.
+    
+    PROBLEM CONTEXT:
+    ${problemContext}
+    `;
+
+    const schema: Schema = {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                id: { type: Type.INTEGER },
+                front: { type: Type.STRING, description: "The concept name or term (e.g. 'Chain Rule')" },
+                back: { type: Type.STRING, description: "The definition or formula (e.g. 'd/dx f(g(x)) = ...')" },
+                category: { type: Type.STRING, description: "The branch of math (e.g. 'Calculus', 'Algebra')" }
+            },
+            required: ["id", "front", "back", "category"]
+        }
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema,
+                temperature: 0.3
+            }
+        });
+
+        if (response.text) {
+            return JSON.parse(response.text) as Flashcard[];
+        }
+        return [];
+    } catch (e) {
+        console.error("Flashcard Gen Error:", e);
+        return [];
     }
 }

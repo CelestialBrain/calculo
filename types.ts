@@ -5,7 +5,25 @@ export interface DebugMetrics {
   model: string;
 }
 
+export interface Flashcard {
+  id: number;
+  front: string; // The Term (e.g. "Chain Rule")
+  back: string;  // The Definition/Formula
+  category: string; // e.g. "Calculus"
+}
+
+export type GenerationMode = 'PROBLEM' | 'FLASHCARDS' | 'QUIZ';
+
+export interface QuizQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: number; // Index 0-3
+  explanation: string;
+}
+
 export interface MathProblemState {
+  mode: GenerationMode; // Track which mode generated this data
   problem: string | null;
   difficultyAnalysis: string | null;
   solution: string | null;
@@ -16,6 +34,9 @@ export interface MathProblemState {
   analystReport?: string | null;
   debugPrompt?: string | null;
   debugMetrics?: DebugMetrics | null;
+  // Interactive Features
+  flashcards?: Flashcard[] | null;
+  quiz?: QuizQuestion[] | null;
 }
 
 export interface HistoryItem {

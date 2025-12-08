@@ -1,15 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, FileText, Sparkles, BrainCircuit, Sigma, Layers } from 'lucide-react';
-import { FileData, AppStatus } from '../types';
+import { Upload, X, FileText, Sparkles, BrainCircuit, Sigma, Layers, BarChart3, HelpCircle, GraduationCap } from 'lucide-react';
+import { FileData, AppStatus, GenerationMode } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface InputFormProps {
-  onGenerate: (topic: string, files: FileData[]) => void;
+  onGenerate: (topic: string, files: FileData[], difficulty: number, mode: GenerationMode) => void;
   status: AppStatus;
 }
 
 const InputForm: React.FC<InputFormProps> = ({ onGenerate, status }) => {
   const [topic, setTopic] = useState('');
+  const [difficulty, setDifficulty] = useState(3);
+  const [mode, setMode] = useState<GenerationMode>('PROBLEM');
   const [files, setFiles] = useState<FileData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_FILES = 10;
@@ -56,14 +58,65 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, status }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (status === AppStatus.GENERATING_PROBLEM) return;
-    onGenerate(topic, files);
+    onGenerate(topic, files, difficulty, mode);
   };
 
   const isGenerating = status === AppStatus.GENERATING_PROBLEM;
 
+  const getDifficultyLabel = (val: number) => {
+      if (val === 1) return "Review (1.0x)";
+      if (val === 2) return "Practice (1.2x)";
+      if (val === 3) return "Challenge (1.5x)";
+      if (val === 4) return "Advanced (2.0x)";
+      return "Olympiad (Max)";
+  };
+
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-8">
       
+      {/* Mode Selector */}
+      <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm flex">
+        <button
+          type="button"
+          onClick={() => setMode('PROBLEM')}
+          disabled={isGenerating}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+            mode === 'PROBLEM' 
+              ? 'bg-[#007AFF] text-white shadow-md' 
+              : 'text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <BrainCircuit size={18} />
+          Architect
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('FLASHCARDS')}
+          disabled={isGenerating}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+            mode === 'FLASHCARDS' 
+              ? 'bg-[#007AFF] text-white shadow-md' 
+              : 'text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Layers size={18} />
+          Flashcards
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('QUIZ')}
+          disabled={isGenerating}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+            mode === 'QUIZ' 
+              ? 'bg-[#007AFF] text-white shadow-md' 
+              : 'text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <GraduationCap size={18} />
+          Quiz
+        </button>
+      </div>
+
       {/* Topic Input with LaTeX Support */}
       <div className="group relative">
         <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1 flex items-center justify-between">
@@ -95,6 +148,40 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, status }) => {
                 </div>
             </div>
         )}
+      </div>
+
+      {/* Difficulty Slider */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <BarChart3 size={18} className="text-[#007AFF]" />
+                  Target Difficulty
+              </label>
+              <span className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${
+                  difficulty >= 5 ? 'bg-purple-100 text-purple-600' :
+                  difficulty >= 3 ? 'bg-blue-100 text-[#007AFF]' :
+                  'bg-emerald-100 text-emerald-600'
+              }`}>
+                  {getDifficultyLabel(difficulty)}
+              </span>
+          </div>
+          <input 
+              type="range" 
+              min="1" 
+              max="5" 
+              step="1" 
+              value={difficulty} 
+              onChange={(e) => setDifficulty(parseInt(e.target.value))}
+              className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#007AFF] hover:accent-[#005ecb] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              disabled={isGenerating}
+          />
+          <div className="flex justify-between text-[10px] text-slate-400 font-medium mt-3 uppercase tracking-wider">
+              <span>Review</span>
+              <span>Practice</span>
+              <span>Challenge</span>
+              <span>Advanced</span>
+              <span>Olympiad</span>
+          </div>
       </div>
 
       {/* File Upload Area */}
@@ -169,12 +256,12 @@ const InputForm: React.FC<InputFormProps> = ({ onGenerate, status }) => {
         {isGenerating ? (
           <>
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            <span>Constructing Problem...</span>
+            <span>Constructing {mode === 'QUIZ' ? 'Quiz' : mode === 'FLASHCARDS' ? 'Deck' : 'Problem'}...</span>
           </>
         ) : (
           <>
-            <BrainCircuit size={24} />
-            <span>Generate Challenge</span>
+            {mode === 'QUIZ' ? <GraduationCap size={24} /> : mode === 'FLASHCARDS' ? <Layers size={24} /> : <BrainCircuit size={24} />}
+            <span>Generate {mode === 'QUIZ' ? 'Quiz' : mode === 'FLASHCARDS' ? 'Flashcards' : 'Challenge'}</span>
           </>
         )}
       </button>
