@@ -1,5 +1,5 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { FileData } from "../types";
+import { FileData, DebugMetrics } from "../types";
 
 // --- SYSTEM INSTRUCTIONS ---
 
@@ -54,6 +54,19 @@ $$
 ---
 `;
 
+interface GenerateProblemResult {
+  text: string;
+  analystReport: string;
+  debugPrompt: string;
+  debugMetrics: DebugMetrics;
+}
+
+export interface DebugUpdate {
+    analystReport?: string;
+    debugPrompt?: string;
+    model?: string;
+}
+
 // --- HELPER FUNCTIONS ---
 
 const getAnalystSummary = async (topic: string, files: FileData[], ai: GoogleGenAI): Promise<string> => {
@@ -97,18 +110,30 @@ const getAnalystSummary = async (topic: string, files: FileData[], ai: GoogleGen
 
 export const generateProblem = async (
   topic: string,
-  files: FileData[]
-): Promise<string> => {
+  files: FileData[],
+  onProgress?: (update: DebugUpdate) => void
+): Promise<GenerateProblemResult> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const startTime = Date.now();
   
+  // Notify start
+  if (onProgress) onProgress({ model: 'gemini-2.5-flash (Analyst)' });
+
   // 1. Run Analyst Pass
   const analystSummary = await getAnalystSummary(topic, files, ai);
+  
+  // STREAM UPDATE: Analyst Report Ready
+  if (onProgress) {
+      onProgress({ 
+          analystReport: analystSummary,
+          model: 'gemini-3-pro-preview (Architect)' // Switching context
+      });
+  }
 
   // 2. Run Architect Pass
-  // Using gemini-3-pro-preview for complex text synthesis.
-  // Note: Thinking budget is removed to optimize costs.
+  // Using gemini-3-pro-preview for complex reasoning
   
-  const userPrompt = `
+  const debugPrompt = `
     ### ANALYST REPORT
     ${analystSummary}
 
@@ -118,10 +143,14 @@ export const generateProblem = async (
     Ensure the problem is solvable and academically sound.
   `;
 
-  const parts: any[] = [{ text: userPrompt }];
+  // STREAM UPDATE: Architect Prompt Ready
+  if (onProgress) {
+      onProgress({ debugPrompt: debugPrompt });
+  }
+
+  const parts: any[] = [{ text: debugPrompt }];
   
-  // We re-attach files to the Architect for deep reference if needed, 
-  // but the Analyst report guides the generation.
+  // We re-attach files to the Architect for deep reference if needed
   files.forEach(file => {
       parts.unshift({
           inlineData: {
@@ -132,19 +161,37 @@ export const generateProblem = async (
   });
 
   try {
+    const modelName = "gemini-3-pro-preview";
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", 
+      model: modelName, 
       contents: {
         parts: parts,
       },
       config: {
         systemInstruction: ARCHITECT_INSTRUCTION,
         temperature: 0.7,
-        // thinkingConfig removed for cost optimization
       },
     });
 
-    return response.text || "Error: No text generated.";
+    const endTime = Date.now();
+    const latencyMs = endTime - startTime;
+    
+    // Extract metrics if available
+    const inputTokens = response.usageMetadata?.promptTokenCount || 0;
+    const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
+
+    return {
+        text: response.text || "Error: No text generated.",
+        analystReport: analystSummary,
+        debugPrompt: debugPrompt,
+        debugMetrics: {
+            latencyMs,
+            inputTokens,
+            outputTokens,
+            model: modelName
+        }
+    };
+
   } catch (error) {
     console.error("Gemini API Error:", error);
     throw error;
@@ -155,7 +202,6 @@ export const generateProblemImage = async (problemDescription: string): Promise<
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
-        // Only called when user explicitly requests visualization
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: {

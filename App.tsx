@@ -3,15 +3,20 @@ import InputForm from './components/InputForm';
 import ProblemDisplay from './components/ProblemDisplay';
 import ReasoningSidebar from './components/ReasoningSidebar';
 import HistorySidebar from './components/HistorySidebar';
-import { generateProblem, generateProblemImage } from './services/gemini';
+import DebugHUD from './components/DebugHUD';
+import { generateProblem, generateProblemImage, DebugUpdate } from './services/gemini';
 import { MathProblemState, AppStatus, FileData, GeneratedImage, HistoryItem } from './types';
-import { Calculator, Image as ImageIcon, RotateCcw, AlertCircle, Clock } from 'lucide-react';
+import { Calculator, Image as ImageIcon, RotateCcw, AlertCircle, Clock, Terminal } from 'lucide-react';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [error, setError] = useState<string | null>(null);
   const [problemData, setProblemData] = useState<MathProblemState | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
+  // Live Debug State for real-time HUD updates
+  const [liveDebugData, setLiveDebugData] = useState<Partial<MathProblemState>>({});
   
   // History State
   const [history, setHistory] = useState<HistoryItem[]>(() => {
@@ -28,6 +33,18 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('math_architect_history', JSON.stringify(history));
   }, [history]);
+
+  // Keyboard shortcut for Debug HUD
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault();
+        setShowDebug(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const parseGeminiResponse = (text: string): MathProblemState => {
     // Helper to extract sections safely, supporting both ## and ###
@@ -60,12 +77,36 @@ const App: React.FC = () => {
     setError(null);
     setProblemData(null);
     setGeneratedImage(null);
-    setShowHistory(false); // Close history if open
+    setShowHistory(false); 
+    setLiveDebugData({}); // Reset live debug data
 
     try {
-      const rawText = await generateProblem(topic, files);
-      const parsedData = parseGeminiResponse(rawText);
+      // Return object with text AND debug info, passing callback for streaming updates
+      const result = await generateProblem(topic, files, (update: DebugUpdate) => {
+         setLiveDebugData(prev => ({
+             ...prev,
+             analystReport: update.analystReport || prev.analystReport,
+             debugPrompt: update.debugPrompt || prev.debugPrompt,
+             debugMetrics: { 
+                ...prev.debugMetrics, 
+                model: update.model || prev.debugMetrics?.model || 'gemini-2.5-flash',
+                // Keep other metrics zero/null until final
+                latencyMs: 0,
+                inputTokens: 0,
+                outputTokens: 0
+             } as any
+         }));
+      });
+      
+      const parsedData = parseGeminiResponse(result.text);
+      
+      // Merge Debug Info into State
+      parsedData.analystReport = result.analystReport;
+      parsedData.debugPrompt = result.debugPrompt;
+      parsedData.debugMetrics = result.debugMetrics;
+
       setProblemData(parsedData);
+      setLiveDebugData(parsedData); // Ensure HUD shows final state
       setStatus(AppStatus.SUCCESS);
 
       // Add to History
@@ -99,8 +140,9 @@ const App: React.FC = () => {
 
   const restoreFromHistory = (item: HistoryItem) => {
     setProblemData(item.data);
+    setLiveDebugData(item.data); // Restore debug data to HUD
     setStatus(AppStatus.SUCCESS);
-    setGeneratedImage(null); // Reset image as it's not stored in history
+    setGeneratedImage(null);
     setError(null);
   };
 
@@ -112,6 +154,7 @@ const App: React.FC = () => {
   const resetApp = () => {
       setStatus(AppStatus.IDLE);
       setProblemData(null);
+      setLiveDebugData({});
       setGeneratedImage(null);
       setError(null);
   }
@@ -130,6 +173,13 @@ const App: React.FC = () => {
         onSelect={restoreFromHistory}
         onClear={clearHistory}
       />
+      {/* Pass liveDebugData if generating, otherwise problemData */}
+      <DebugHUD 
+        isVisible={showDebug} 
+        onClose={() => setShowDebug(false)} 
+        data={isReasoning ? (liveDebugData as MathProblemState) : problemData} 
+        isLive={isReasoning}
+      />
 
       {/* History Toggle Button (Absolute Top Left) */}
       <button 
@@ -139,6 +189,17 @@ const App: React.FC = () => {
       >
         <Clock size={20} />
       </button>
+
+      {/* Debug Toggle Hint (Only visible when idle or success) */}
+      {!isReasoning && (
+          <button 
+            onClick={() => setShowDebug(prev => !prev)}
+            className="fixed bottom-4 right-4 z-40 p-2 text-xs font-mono text-slate-300 hover:text-slate-500 transition-colors"
+            title="Toggle Debug HUD (Cmd + .)"
+          >
+            v1.3 • <Terminal size={12} className="inline mb-0.5" />
+          </button>
+      )}
 
       <div className={`relative z-10 max-w-5xl mx-auto px-4 md:px-6 transition-all duration-500 ease-out ${isReasoning ? 'mr-72 opacity-40 pointer-events-none blur-[2px]' : ''}`}>
         

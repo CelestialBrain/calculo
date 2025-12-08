@@ -1,3 +1,10 @@
+export interface DebugMetrics {
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+}
+
 export interface MathProblemState {
   problem: string | null;
   difficultyAnalysis: string | null;
@@ -5,6 +12,10 @@ export interface MathProblemState {
   finalResult: string | null;
   pythonCode: string | null;
   rawResponse: string | null;
+  // Hybrid Architecture Debug Data
+  analystReport?: string | null;
+  debugPrompt?: string | null;
+  debugMetrics?: DebugMetrics | null;
 }
 
 export interface HistoryItem {
