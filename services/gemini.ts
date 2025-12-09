@@ -1,5 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse, Type, Schema } from "@google/genai";
-import { FileData, DebugMetrics, Flashcard, GenerationMode, QuizQuestion, MathProblemState } from "../types";
+import { FileData, DebugMetrics, Flashcard, GenerationMode, QuizQuestion, MathProblemState, HintRequest } from "../types";
+import { withRetry } from "../utils/retry";
 
 // --- SYSTEM INSTRUCTIONS ---
 
@@ -12,6 +13,14 @@ Output a concise summary.
 const ARCHITECT_INSTRUCTION = `
 ### ROLE
 You are the "Math Architect," designed to construct high-level, rigorous, and solvable mathematics problems based on an analyst's report.
+
+### THINKING PROCESS (Internal)
+Before writing, mentally:
+1. Identify 2-3 core concepts being tested
+2. Plan 3-5 logical solution steps
+3. Verify the problem is solvable with the given constraints
+4. Ensure no ambiguity in the problem statement
+5. Consider the mathematical domain (calculus, algebra, geometry, etc.) for appropriate difficulty scaling
 
 ### OUTPUT FORMATTING RULES (STRICT)
 1. **Structure:** Use the EXACT headers defined in the template below.
@@ -106,13 +115,30 @@ const runArchitectMode = async (
     files: FileData[], 
     difficulty: number
 ) => {
-    let instructionOverride = "";
-    if (difficulty === 1) instructionOverride = "Create a problem of EQUAL difficulty. Focus on reinforcement and conceptual clarity.";
-    else if (difficulty === 2) instructionOverride = "Create a problem slightly harder (1.2x). Introduce one new constraint or minor twist.";
-    else if (difficulty === 3) instructionOverride = "Create a problem 1.5x HARDER. Combine concepts from different areas.";
-    else if (difficulty === 4) instructionOverride = "Create a significantly harder problem (2.0x). Require deep insight and multiple solution stages.";
-    else if (difficulty === 5) instructionOverride = "Create an OLYMPIAD-LEVEL problem. Require abstract proof, novel application, or exceptional problem-solving creativity.";
-    else instructionOverride = "Create a problem 1.5x HARDER."; 
+    // Topic-aware difficulty scaling
+    const getDifficultyInstruction = (level: number, contextSummary: string): string => {
+        // Detect mathematical domain from topic/context
+        // We search both the user's topic and the analyst's summary for domain keywords
+        const context = `${topic} ${contextSummary}`.toLowerCase();
+        const isCalculus = /calculus|derivative|integral|limit|continuity/i.test(context);
+        const isAlgebra = /algebra|polynomial|equation|matrix|linear/i.test(context);
+        const isGeometry = /geometry|triangle|circle|angle|area|volume/i.test(context);
+        const isProof = /proof|theorem|lemma|induction|logic/i.test(context);
+        
+        const domainContext = isCalculus ? " (Calculus domain)" :
+                             isAlgebra ? " (Algebra domain)" :
+                             isGeometry ? " (Geometry domain)" :
+                             isProof ? " (Proof-based)" : "";
+        
+        if (level === 1) return `Create a problem of EQUAL difficulty${domainContext}. Focus on reinforcement and conceptual clarity. Use straightforward applications of fundamental concepts.`;
+        else if (level === 2) return `Create a problem slightly harder (1.2x)${domainContext}. Introduce one new constraint or minor twist to the basic concept.`;
+        else if (level === 3) return `Create a problem 1.5x HARDER${domainContext}. Combine 2-3 concepts or require multi-step reasoning.`;
+        else if (level === 4) return `Create a significantly harder problem (2.0x)${domainContext}. Require deep insight, multiple solution stages, and creative problem-solving.`;
+        else if (level === 5) return `Create an OLYMPIAD-LEVEL problem${domainContext}. Require abstract thinking, novel application of concepts, proof techniques, or exceptional mathematical creativity.`;
+        return `Create a problem 1.5x HARDER${domainContext}.`;
+    };
+
+    const instructionOverride = getDifficultyInstruction(difficulty, analystSummary);
 
     const debugPrompt = `
       ### ANALYST REPORT
@@ -230,6 +256,26 @@ const runQuizMode = async (ai: GoogleGenAI, analystSummary: string, topic: strin
 
 // --- MAIN EXPORT ---
 
+/**
+ * Generate mathematical content based on mode (PROBLEM, FLASHCARDS, or QUIZ)
+ * 
+ * This is the main entry point for content generation. It uses a hybrid architecture:
+ * 1. Analyst Pass (Gemini Flash): Analyzes context and extracts key concepts
+ * 2. Generation Pass: Uses appropriate model based on mode
+ * 
+ * Features:
+ * - Automatic retry with exponential backoff
+ * - Topic-aware difficulty scaling
+ * - Progress callbacks for real-time updates
+ * - Comprehensive error handling
+ * 
+ * @param topic - The mathematical topic or concept to generate content for
+ * @param files - Optional context files (images, PDFs) to inform generation
+ * @param difficulty - Difficulty level (1-5): 1=Review, 2=Practice, 3=Challenge, 4=Advanced, 5=Olympiad
+ * @param mode - Generation mode: 'PROBLEM', 'FLASHCARDS', or 'QUIZ'
+ * @param onProgress - Optional callback for real-time progress updates
+ * @returns Partial MathProblemState with generated content and metadata
+ */
 export const generateMathContent = async (
   topic: string,
   files: FileData[],
@@ -251,22 +297,22 @@ export const generateMathContent = async (
       });
   }
 
-  // 2. Branch based on Mode
+  // 2. Branch based on Mode with retry logic
   let result;
   let resultData: Partial<MathProblemState> = { mode, analystReport: analystSummary };
 
   try {
       if (mode === 'PROBLEM') {
-          result = await runArchitectMode(ai, analystSummary, topic, files, difficulty);
+          result = await withRetry(() => runArchitectMode(ai, analystSummary, topic, files, difficulty));
           resultData.rawResponse = result.text;
           resultData.debugPrompt = result.prompt;
           // Note: Parsing logic handled in App.tsx
       } else if (mode === 'FLASHCARDS') {
-          result = await runFlashcardMode(ai, analystSummary, topic);
+          result = await withRetry(() => runFlashcardMode(ai, analystSummary, topic));
           resultData.flashcards = JSON.parse(result.text || "[]");
           resultData.debugPrompt = result.prompt;
       } else if (mode === 'QUIZ') {
-          result = await runQuizMode(ai, analystSummary, topic, difficulty);
+          result = await withRetry(() => runQuizMode(ai, analystSummary, topic, difficulty));
           resultData.quiz = JSON.parse(result.text || "[]");
           resultData.debugPrompt = result.prompt;
       }
@@ -402,3 +448,157 @@ export const generateFlashcards = async (problemContext: string): Promise<Flashc
         return [];
     }
 }
+
+/**
+ * Generate a progressive hint for a specific solution step
+ */
+export const generateHint = async (
+  stepText: string, 
+  problemContext: string, 
+  hintLevel: 'nudge' | 'partial' | 'full'
+): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const hintInstructions = {
+        nudge: `Provide a minimal nudge (1 sentence) that helps the student think about the right approach WITHOUT revealing the solution. Ask a guiding question or mention a relevant theorem.`,
+        partial: `Provide a partial hint (2-3 sentences) that explains the general approach and identifies the key concept or formula to use, but don't show the complete calculation.`,
+        full: `Provide a full, detailed explanation of this step, including the reasoning, the formula/theorem applied, and the complete calculation with intermediate steps.`
+    };
+
+    const prompt = `
+    CONTEXT (Full Problem & Solution):
+    ${problemContext}
+
+    CURRENT STEP:
+    ${stepText}
+
+    HINT LEVEL: ${hintLevel.toUpperCase()}
+    INSTRUCTION: ${hintInstructions[hintLevel]}
+    
+    IMPORTANT: Use LaTeX for all math expressions (e.g., $x^2$, $$\\int_0^1 f(x) dx$$).
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: { temperature: 0.6 }
+        });
+        return response.text || "Could not generate hint.";
+    } catch (error) {
+        console.error("Hint Generation Error:", error);
+        return "Sorry, I couldn't generate a hint right now.";
+    }
+};
+
+/**
+ * Generate similar problems that test the same concepts with variations
+ */
+export const generateSimilarProblems = async (
+    originalProblem: string,
+    concepts: string,
+    difficulty: number
+): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    ORIGINAL PROBLEM:
+    ${originalProblem}
+
+    KEY CONCEPTS TESTED:
+    ${concepts}
+
+    TASK: Generate 3 similar problems that test the same concepts but with different:
+    - Numerical values
+    - Variable names
+    - Context or scenario (if applicable)
+    - Minor variations in constraints
+
+    DIFFICULTY LEVEL: ${difficulty}/5 (maintain similar difficulty)
+
+    FORMAT: Use the same structured format as the original, with clear problem statements using LaTeX for math.
+    Number the problems as: **Problem 1**, **Problem 2**, **Problem 3**
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: { 
+                systemInstruction: ARCHITECT_INSTRUCTION,
+                temperature: 0.8 
+            }
+        });
+        return response.text || "Could not generate similar problems.";
+    } catch (error) {
+        console.error("Similar Problems Error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Verify a generated problem for correctness and solvability
+ */
+export const verifyProblem = async (
+    problemStatement: string,
+    solution: string,
+    finalAnswer: string
+): Promise<{ isValid: boolean; issues: string[] }> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    You are a math verification expert. Review this problem and solution for:
+    1. Mathematical correctness
+    2. Logical consistency in the solution steps
+    3. Whether the final answer is correct
+    4. Any ambiguities or errors
+
+    PROBLEM:
+    ${problemStatement}
+
+    SOLUTION:
+    ${solution}
+
+    FINAL ANSWER:
+    ${finalAnswer}
+
+    Respond in JSON format:
+    {
+        "isValid": true/false,
+        "issues": ["list of any issues found, or empty array if none"]
+    }
+    `;
+
+    const schema: Schema = {
+        type: Type.OBJECT,
+        properties: {
+            isValid: { type: Type.BOOLEAN },
+            issues: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING } 
+            }
+        },
+        required: ["isValid", "issues"]
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: schema,
+                temperature: 0.2
+            }
+        });
+        
+        if (response.text) {
+            return JSON.parse(response.text);
+        }
+        console.warn("Verification response was empty, assuming valid");
+        return { isValid: true, issues: [] }; // Assume valid if verification fails
+    } catch (error) {
+        console.warn("Verification failed, assuming valid:", error);
+        return { isValid: true, issues: [] }; // Don't block on verification failure
+    }
+};

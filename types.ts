@@ -64,3 +64,19 @@ export interface FileData {
   base64: string;
   mimeType: string;
 }
+
+export interface HintRequest {
+  stepNumber: number;
+  hintLevel: 'nudge' | 'partial' | 'full';
+}
+
+export interface ToastState {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+export interface CacheEntry {
+  key: string;
+  data: MathProblemState;
+  timestamp: number;
+}
