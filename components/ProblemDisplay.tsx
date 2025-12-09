@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Eye, EyeOff, Code, Activity, BrainCircuit, Copy, Check, Download, Loader2, CircleHelp, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Code, Activity, BrainCircuit, Copy, Check, Download, Loader2, CircleHelp, Sparkles, RefreshCw } from 'lucide-react';
 import { MathProblemState } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 import ReactMarkdown from 'react-markdown';
@@ -7,14 +7,16 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { explainMathStep } from '../services/gemini';
+import { explainMathStep, generateHint, generateSimilarProblems } from '../services/gemini';
 import FlashcardDeck from './FlashcardDeck';
+import HintButton from './HintButton';
 
 interface ProblemDisplayProps {
   data: MathProblemState;
+  onSimilarProblems?: (problems: string) => void;
 }
 
-const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
+const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data, onSimilarProblems }) => {
   const [showSolution, setShowSolution] = useState(false);
   const [showPython, setShowPython] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -22,6 +24,12 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
   
   // State for step explanations: { [stepIndex]: { text: string, loading: boolean } }
   const [explanations, setExplanations] = useState<{[key: number]: {text: string | null, loading: boolean}}>({});
+  
+  // State for hints: { [stepIndex]: { [hintLevel]: { text: string, loading: boolean } } }
+  const [hints, setHints] = useState<{[key: number]: {[key: string]: {text: string | null, loading: boolean}}}>({});
+  
+  // State for similar problems
+  const [generatingSimilar, setGeneratingSimilar] = useState(false);
   
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -108,6 +116,60 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
           ...prev,
           [index]: { text: explanation, loading: false }
       }));
+  };
+
+  const handleRequestHint = async (
+    index: number, 
+    stepText: string, 
+    hintLevel: 'nudge' | 'partial' | 'full'
+  ) => {
+      // If already loaded, don't re-fetch
+      if (hints[index]?.[hintLevel]?.text || hints[index]?.[hintLevel]?.loading) return;
+
+      setHints(prev => ({
+          ...prev,
+          [index]: {
+              ...prev[index],
+              [hintLevel]: { text: null, loading: true }
+          }
+      }));
+
+      const context = `
+      PROBLEM STATEMENT:
+      ${data.problem}
+
+      FULL SOLUTION:
+      ${data.solution}
+      `;
+
+      const hint = await generateHint(stepText, context, hintLevel);
+
+      setHints(prev => ({
+          ...prev,
+          [index]: {
+              ...prev[index],
+              [hintLevel]: { text: hint, loading: false }
+          }
+      }));
+  };
+
+  const handleGenerateSimilarProblems = async () => {
+      if (!data.problem || !data.difficultyAnalysis) return;
+      
+      setGeneratingSimilar(true);
+      try {
+          const concepts = data.difficultyAnalysis || "Core mathematical concepts";
+          const difficulty = 3; // Default to medium difficulty
+          const similarProblems = await generateSimilarProblems(data.problem, concepts, difficulty);
+          
+          if (onSimilarProblems) {
+              onSimilarProblems(similarProblems);
+          }
+      } catch (error) {
+          console.error("Failed to generate similar problems:", error);
+      } finally {
+          setGeneratingSimilar(false);
+      }
   };
 
   // Split the solution into steps based on the ### Step header
@@ -211,12 +273,37 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
                 {solutionSteps.length > 0 ? (
                     solutionSteps.map((step, index) => {
                         const explanation = explanations[index];
+                        const stepHints = hints[index] || {};
                         return (
                             <div key={index} className="relative group">
                                 {/* The Step Content */}
                                 <div className="prose-step relative z-10">
                                     <MarkdownRenderer content={step} />
                                 </div>
+
+                                {/* Progressive Hint Buttons - Show before revealing explanation */}
+                                {!explanation?.text && (
+                                    <div className="mt-4 flex gap-2 flex-wrap no-print opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                        <HintButton
+                                            hintLevel="nudge"
+                                            onClick={() => handleRequestHint(index, step, 'nudge')}
+                                            loading={stepHints.nudge?.loading}
+                                            disabled={!!stepHints.nudge?.text}
+                                        />
+                                        <HintButton
+                                            hintLevel="partial"
+                                            onClick={() => handleRequestHint(index, step, 'partial')}
+                                            loading={stepHints.partial?.loading}
+                                            disabled={!!stepHints.partial?.text}
+                                        />
+                                        <HintButton
+                                            hintLevel="full"
+                                            onClick={() => handleRequestHint(index, step, 'full')}
+                                            loading={stepHints.full?.loading}
+                                            disabled={!!stepHints.full?.text}
+                                        />
+                                    </div>
+                                )}
 
                                 {/* Floating Help Button - Visible on hover or if explaining */}
                                 <button 
@@ -231,6 +318,22 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
                                 >
                                     <CircleHelp size={20} />
                                 </button>
+
+                                {/* Display Hints */}
+                                {Object.entries(stepHints).map(([level, hint]) => (
+                                    hint.text && (
+                                        <div key={level} className="mt-4 ml-6 mr-6 p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="flex items-start gap-2 mb-1">
+                                                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                                                    {level} hint
+                                                </span>
+                                            </div>
+                                            <div className="text-slate-700 text-sm leading-relaxed">
+                                                <MarkdownRenderer content={hint.text} />
+                                            </div>
+                                        </div>
+                                    )
+                                ))}
 
                                 {/* Explanation Bubble */}
                                 {(explanation?.loading || explanation?.text) && (
@@ -275,6 +378,35 @@ const ProblemDisplay: React.FC<ProblemDisplayProps> = ({ data }) => {
                     </div>
                 </div>
             )}
+        </div>
+      )}
+
+      {/* Similar Problems Generator */}
+      {data.problem && (
+        <div className="mt-12 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-2xl p-8 no-print">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">Practice More</h3>
+                    <p className="text-slate-600 text-sm">Generate similar problems to reinforce these concepts</p>
+                </div>
+                <button 
+                    onClick={handleGenerateSimilarProblems}
+                    disabled={generatingSimilar}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-xl font-semibold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {generatingSimilar ? (
+                        <>
+                            <Loader2 size={18} className="animate-spin" />
+                            <span>Generating...</span>
+                        </>
+                    ) : (
+                        <>
+                            <RefreshCw size={18} />
+                            <span>Generate Similar Problems</span>
+                        </>
+                    )}
+                </button>
+            </div>
         </div>
       )}
 

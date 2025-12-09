@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import InputForm from './components/InputForm';
 import ProblemDisplay from './components/ProblemDisplay';
+import ProblemSkeleton from './components/ProblemSkeleton';
+import Toast from './components/Toast';
 import ReasoningSidebar from './components/ReasoningSidebar';
 import DebugHUD from './components/DebugHUD';
 import FlashcardDeck from './components/FlashcardDeck';
 import QuizDisplay from './components/QuizDisplay';
 import { generateMathContent, generateProblemImage, DebugUpdate } from './services/gemini';
-import { MathProblemState, AppStatus, FileData, GeneratedImage, HistoryItem, GenerationMode } from './types';
+import { MathProblemState, AppStatus, FileData, GeneratedImage, HistoryItem, GenerationMode, ToastState } from './types';
 import { 
   Calculator, 
   Image as ImageIcon, 
@@ -26,6 +28,8 @@ const App: React.FC = () => {
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [activeTab, setActiveTab] = useState('calculo'); // Default active tab
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   
   // Live Debug State for real-time HUD updates
   const [liveDebugData, setLiveDebugData] = useState<Partial<MathProblemState>>({});
@@ -45,17 +49,40 @@ const App: React.FC = () => {
     localStorage.setItem('math_architect_history', JSON.stringify(history));
   }, [history]);
 
-  // Keyboard shortcut for Debug HUD
+  // Toast notification helper
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
+
+  // Enhanced keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + . - Toggle debug
       if ((e.metaKey || e.ctrlKey) && e.key === '.') {
         e.preventDefault();
         setShowDebug(prev => !prev);
       }
+      // Ctrl/Cmd + H - Toggle history
+      if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
+        e.preventDefault();
+        setActiveTab(prev => prev === 'history' ? 'calculo' : 'history');
+        setShowHistorySidebar(prev => !prev);
+      }
+      // Ctrl/Cmd + Enter - Trigger generation when idle
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (status === AppStatus.IDLE) {
+          // Trigger form submission if possible
+          const form = document.querySelector('form');
+          if (form) {
+            form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [status]);
 
   const parseGeminiResponse = (text: string): Partial<MathProblemState> => {
     const extractSection = (headerPattern: string, nextHeaderPattern: string) => {
@@ -133,25 +160,38 @@ const App: React.FC = () => {
         data: finalData
       };
       setHistory(prev => [newItem, ...prev]);
+      
+      // Show success toast
+      showToast(`${mode === 'PROBLEM' ? 'Problem' : mode === 'QUIZ' ? 'Quiz' : 'Flashcards'} generated successfully!`, 'success');
 
     } catch (e: any) {
       console.error(e);
       setError(e.message || "Failed to generate content.");
       setStatus(AppStatus.ERROR);
+      showToast('Failed to generate content. Please try again.', 'error');
     }
   };
 
   const handleGenerateImage = async () => {
       if (!problemData?.problem) return;
       setGeneratedImage({ url: '', loading: true });
+      showToast('Generating image...', 'info');
       try {
           const base64Image = await generateProblemImage(problemData.problem);
           setGeneratedImage({ url: base64Image, loading: false });
+          showToast('Image generated successfully!', 'success');
       } catch (e: any) {
           console.error(e);
           setGeneratedImage(null);
-          alert("Could not generate image. " + e.message);
+          showToast('Failed to generate image. ' + e.message, 'error');
       }
+  };
+
+  const handleSimilarProblems = (problems: string) => {
+      // Store similar problems in a toast or modal
+      showToast('Similar problems generated! Check the console.', 'info');
+      console.log('Similar Problems:\n', problems);
+      // You could also create a modal or new section to display these
   };
 
   const restoreFromHistory = (item: HistoryItem) => {
@@ -161,12 +201,14 @@ const App: React.FC = () => {
     setGeneratedImage(null);
     setError(null);
     setActiveTab('calculo'); // Switch to main tab to view restored content
+    showToast('Problem restored from history', 'success');
   };
 
   const clearHistory = () => {
     if (window.confirm('Are you sure you want to clear your history?')) {
         setHistory([]);
         localStorage.removeItem('math_architect_history');
+        showToast('History cleared', 'success');
     }
   };
 
@@ -235,7 +277,7 @@ const App: React.FC = () => {
 
              <div className="max-w-5xl mx-auto px-4 md:px-8">
                 {/* Input / Problem View */}
-                {status === AppStatus.IDLE || status === AppStatus.GENERATING_PROBLEM || status === AppStatus.ERROR ? (
+                {status === AppStatus.IDLE || status === AppStatus.ERROR ? (
                   <div className="animate-fade-in pb-12">
                      <InputForm onGenerate={handleGenerate} status={status} />
                      {error && (
@@ -244,6 +286,10 @@ const App: React.FC = () => {
                             <p>{error}</p>
                          </div>
                      )}
+                  </div>
+                ) : status === AppStatus.GENERATING_PROBLEM ? (
+                  <div className="animate-fade-in pb-12">
+                     <ProblemSkeleton />
                   </div>
                 ) : (
                   <div className="space-y-8 animate-fade-in-up pb-20">
@@ -261,7 +307,7 @@ const App: React.FC = () => {
                         <>
                             {problemData.mode === 'PROBLEM' && (
                                 <>
-                                    <ProblemDisplay data={problemData} />
+                                    <ProblemDisplay data={problemData} onSimilarProblems={handleSimilarProblems} />
                                     <div className="mt-12 pt-12 border-t border-slate-200">
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8 bg-slate-900 rounded-2xl p-8 text-white shadow-xl">
                                             <div>
@@ -385,6 +431,15 @@ const App: React.FC = () => {
         data={isReasoning ? (liveDebugData as MathProblemState) : problemData} 
         isLive={isReasoning}
       />
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast 
+          message={toast.message} 
+          type={toast.type} 
+          onClose={() => setToast(null)} 
+        />
+      )}
 
       {/* Footer Hints */}
       {!isReasoning && activeTab === 'calculo' && (
