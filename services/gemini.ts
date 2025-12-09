@@ -296,7 +296,7 @@ export const generateProblemImage = async (problemDescription: string): Promise<
     
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-image-preview',
+            model: 'gemini-2.5-flash-image',
             contents: {
                 parts: [
                     { text: `Create a precise, academic, and clear mathematical visualization for this problem: ${problemDescription}. The style should be like a high-quality textbook diagram. Clean lines, white background, distinct geometric shapes, black ink.` }
@@ -304,8 +304,7 @@ export const generateProblemImage = async (problemDescription: string): Promise<
             },
             config: {
                 imageConfig: {
-                    aspectRatio: "16:9",
-                    imageSize: "1K"
+                    aspectRatio: "16:9"
                 }
             }
         });
