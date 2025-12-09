@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* --- SISIA DESIGN TOKENS --- */
+    
+    /* This creates the "Super Rounded" look */
+    --radius: 1.5rem; 
+
+    /* Sisia "Ateneo Blue" Color Palette */
+    --primary-h: 228;
+    --primary-s: 74%;
+    --primary-l: 30%;
+
+    --background: 240 4% 95%;
+    --foreground: 228 37% 10%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 228 37% 10%;
+
+    --popover: 240 5% 90%;
+    --popover-foreground: 228 37% 10%;
+
+    --primary: var(--primary-h) var(--primary-s) var(--primary-l);
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4% 88%;
+    --secondary-foreground: 228 37% 10%;
+
+    --muted: 240 4% 83%;
+    --muted-foreground: 228 37% 25%;
+
+    --accent: var(--primary-h) var(--primary-s) 90%;
+    --accent-foreground: var(--primary-h) var(--primary-s) 20%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 85% 97%;
+
+    --border: 240 4% 83%;
+    --input: 240 4% 83%;
+    --ring: var(--primary-h) var(--primary-s) var(--primary-l);
+
+    /* Fonts */
+    --font-sans: 'Poppins', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* 3D Flip Utilities (Preserved from Calculo) */
+.perspective-1000 { perspective: 1000px; }
+.transform-style-3d { transform-style: preserve-3d; }
+.backface-hidden { backface-visibility: hidden; }
+.rotate-y-180 { transform: rotateY(180deg); }

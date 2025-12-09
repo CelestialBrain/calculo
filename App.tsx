@@ -178,7 +178,7 @@ const App: React.FC = () => {
   const isReasoning = status === AppStatus.GENERATING_PROBLEM;
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-[#1C1C1E] selection:bg-blue-100 selection:text-blue-900 pb-20 overflow-x-hidden font-sans relative">
+    <div className="min-h-screen bg-background text-foreground selection:bg-blue-100 selection:text-blue-900 pb-20 overflow-x-hidden font-sans relative">
       
       {/* Sidebars */}
       <ReasoningSidebar isVisible={isReasoning} />
@@ -222,11 +222,11 @@ const App: React.FC = () => {
         {/* Header */}
         <header className="py-16 text-center space-y-5">
           <div className="inline-flex items-center justify-center p-3 bg-white border border-slate-200 rounded-2xl shadow-sm mb-4">
-             <Calculator size={32} className="text-[#007AFF] mr-2" />
-             <span className="text-2xl font-bold text-slate-900 tracking-tight">Math Architect</span>
+             <Calculator size={32} className="text-primary mr-2" />
+             <span className="text-2xl font-bold text-foreground tracking-tight">Calculo</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight">
-            Construct <span className="text-[#007AFF]">A-Level</span> Problems
+          <h1 className="text-4xl md:text-5xl font-extrabold text-foreground tracking-tight">
+            Construct <span className="text-primary">A-Level</span> Problems
           </h1>
           <p className="text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
             Upload your material to generate rigorous, high-level mathematics problems that demand critical thinking and conceptual synthesis.
@@ -251,7 +251,7 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center max-w-4xl mx-auto">
                 <button 
                     onClick={resetApp}
-                    className="flex items-center gap-2 text-slate-500 hover:text-[#007AFF] transition-colors font-medium text-sm"
+                    className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors font-medium text-sm"
                 >
                     <RotateCcw size={16} /> Create New Problem
                 </button>

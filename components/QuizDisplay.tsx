@@ -70,9 +70,14 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ data }) => {
                     <div key={q.id} className={`p-4 rounded-xl border ${isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'}`}>
                         <div className="flex items-start gap-3">
                              {isCorrect ? <CheckCircle2 className="text-emerald-500 shrink-0 mt-1" size={18} /> : <XCircle className="text-red-500 shrink-0 mt-1" size={18} />}
-                             <div>
-                                 <p className="font-semibold text-slate-800 text-sm mb-1">{q.question}</p>
-                                 <p className="text-xs text-slate-500">Correct: {q.options[q.correctAnswer]}</p>
+                             <div className="w-full">
+                                 <div className="font-semibold text-slate-800 text-sm mb-1 [&_p]:!mb-0 [&_p]:!text-sm">
+                                     <MarkdownRenderer content={q.question} />
+                                 </div>
+                                 <div className="text-xs text-slate-500 flex items-center gap-1 [&_p]:!mb-0 [&_p]:!text-xs">
+                                     <span className="font-bold shrink-0">Correct:</span>
+                                     <MarkdownRenderer content={q.options[q.correctAnswer]} />
+                                 </div>
                              </div>
                         </div>
                     </div>
@@ -107,9 +112,9 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ data }) => {
                 <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-mono text-slate-500">Topic: Math</span>
             </div>
 
-            <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-8 leading-relaxed">
+            <div className="text-xl md:text-2xl font-bold text-slate-900 mb-8 leading-relaxed [&_p]:!mb-0 [&_p]:!text-inherit">
                 <MarkdownRenderer content={currentQuestion.question} />
-            </h2>
+            </div>
 
             <div className="space-y-3">
                 {currentQuestion.options.map((option, idx) => {
@@ -138,9 +143,9 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ data }) => {
                             }`}>
                                 {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-current"></div>}
                             </div>
-                            <span className="text-slate-700 font-medium text-lg">
+                            <div className="text-slate-700 font-medium text-lg [&_p]:!mb-0 [&_p]:!text-lg">
                                 <MarkdownRenderer content={option} />
-                            </span>
+                            </div>
                         </button>
                     );
                 })}
@@ -149,9 +154,9 @@ const QuizDisplay: React.FC<QuizDisplayProps> = ({ data }) => {
             {isAnswered && (
                 <div className="mt-8 p-5 bg-slate-50 border border-slate-200 rounded-xl animate-slide-up">
                     <p className="text-sm font-bold text-slate-700 mb-1">Explanation</p>
-                    <p className="text-slate-600 leading-relaxed text-sm">
+                    <div className="text-slate-600 leading-relaxed text-sm [&_p]:!mb-2 [&_p]:last:mb-0">
                         <MarkdownRenderer content={currentQuestion.explanation} />
-                    </p>
+                    </div>
                 </div>
             )}
         </div>

@@ -3,28 +3,141 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Math Architect</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Calculo</title>
+    
+    <!-- Fonts: Poppins (Sans) & JetBrains Mono (Mono) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Config for CDN -->
+    <script>
+      tailwind.config = {
+        theme: {
+          container: {
+            center: true,
+            padding: "2rem",
+            screens: {
+              "2xl": "1400px",
+            },
+          },
+          extend: {
+            fontFamily: {
+              sans: ["Poppins", "ui-sans-serif", "system-ui", "sans-serif"],
+              mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+            },
+            colors: {
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              ring: "hsl(var(--ring))",
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: {
+                DEFAULT: "hsl(var(--primary))",
+                foreground: "hsl(var(--primary-foreground))",
+              },
+              secondary: {
+                DEFAULT: "hsl(var(--secondary))",
+                foreground: "hsl(var(--secondary-foreground))",
+              },
+              destructive: {
+                DEFAULT: "hsl(var(--destructive))",
+                foreground: "hsl(var(--destructive-foreground))",
+              },
+              muted: {
+                DEFAULT: "hsl(var(--muted))",
+                foreground: "hsl(var(--muted-foreground))",
+              },
+              accent: {
+                DEFAULT: "hsl(var(--accent))",
+                foreground: "hsl(var(--accent-foreground))",
+              },
+              card: {
+                DEFAULT: "hsl(var(--card))",
+                foreground: "hsl(var(--card-foreground))",
+              },
+              popover: {
+                DEFAULT: "hsl(var(--popover))",
+                foreground: "hsl(var(--popover-foreground))",
+              },
+            },
+            borderRadius: {
+              lg: "var(--radius)",
+              md: "calc(var(--radius) - 2px)",
+              sm: "calc(var(--radius) - 4px)",
+            },
+          },
+        },
+      }
+    </script>
+
     <style>
+      :root {
+        /* --- SISIA DESIGN TOKENS --- */
+        
+        /* This creates the "Super Rounded" look */
+        --radius: 1.5rem; 
+    
+        /* Sisia "Ateneo Blue" Color Palette */
+        --primary-h: 228;
+        --primary-s: 74%;
+        --primary-l: 30%;
+    
+        --background: 240 4% 95%;
+        --foreground: 228 37% 10%;
+    
+        --card: 0 0% 98%;
+        --card-foreground: 228 37% 10%;
+    
+        --popover: 240 5% 90%;
+        --popover-foreground: 228 37% 10%;
+    
+        --primary: var(--primary-h) var(--primary-s) var(--primary-l);
+        --primary-foreground: 0 0% 100%;
+    
+        --secondary: 240 4% 88%;
+        --secondary-foreground: 228 37% 10%;
+    
+        --muted: 240 4% 83%;
+        --muted-foreground: 228 37% 25%;
+    
+        --accent: var(--primary-h) var(--primary-s) 90%;
+        --accent-foreground: var(--primary-h) var(--primary-s) 20%;
+    
+        --destructive: 0 72% 50%;
+        --destructive-foreground: 0 85% 97%;
+    
+        --border: 240 4% 83%;
+        --input: 240 4% 83%;
+        --ring: var(--primary-h) var(--primary-s) var(--primary-l);
+        
+        /* Fonts */
+        --font-sans: 'Poppins', sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+      }
+
       body {
-        font-family: 'Inter', sans-serif;
-        background-color: #F5F5F7; /* Apple-style Off-White */
-        color: #1C1C1E; /* Dark Slate Gray */
+        font-family: var(--font-sans);
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
+
       .font-mono {
-        font-family: 'JetBrains Mono', monospace;
+        font-family: var(--font-mono);
       }
-      /* Custom scrollbar for light mode */
+
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #F1F1F1; 
+        background: hsl(var(--background)); 
       }
       ::-webkit-scrollbar-thumb {
         background: #C1C1C1; 
@@ -33,7 +146,8 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #A8A8A8; 
       }
-      /* KaTeX display mode enhancements for readability */
+
+      /* KaTeX display mode enhancements */
       .katex-display {
         overflow-x: auto;
         overflow-y: hidden;
@@ -42,17 +156,30 @@
         text-align: center;
         width: 100%;
       }
-      /* Inline math adjustments to prevent line cramping */
       .katex {
         font-size: 1.15em;
         line-height: 1.2;
       }
-      /* Ensure boxed answers pop */
       .katex .boxed {
         background-color: #fff;
-        border: 2px solid #1C1C1E;
+        border: 2px solid hsl(var(--foreground));
         padding: 8px 12px;
         border-radius: 6px;
+      }
+
+      /* --- 3D Animation Utilities --- */
+      .perspective-1000 {
+        perspective: 1000px;
+      }
+      .transform-style-3d {
+        transform-style: preserve-3d;
+      }
+      .backface-hidden {
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+      }
+      .rotate-y-180 {
+        transform: rotateY(180deg);
       }
     </style>
   <script type="importmap">
@@ -67,7 +194,8 @@
     "rehype-katex": "https://aistudiocdn.com/rehype-katex@^7.0.1",
     "remark-math": "https://aistudiocdn.com/remark-math@^6.0.0",
     "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1",
-    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1"
+    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1",
+    "tailwindcss": "https://aistudiocdn.com/tailwindcss@^4.1.17"
   }
 }
 </script>

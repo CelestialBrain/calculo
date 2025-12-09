@@ -22,7 +22,7 @@ const ReasoningSidebar: React.FC<ReasoningSidebarProps> = ({ isVisible }) => {
     const [elapsedTime, setElapsedTime] = useState(0);
     
     // Refs to manage intervals and animation frames independently
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const timerRef = useRef<number | null>(null);
     const animationFrameRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -34,7 +34,7 @@ const ReasoningSidebar: React.FC<ReasoningSidebarProps> = ({ isVisible }) => {
             const startTime = Date.now();
 
             // 1. Precise Timer: Updates exactly once per second
-            timerRef.current = setInterval(() => {
+            timerRef.current = window.setInterval(() => {
                 const now = Date.now();
                 const seconds = Math.floor((now - startTime) / 1000);
                 setElapsedTime(seconds);

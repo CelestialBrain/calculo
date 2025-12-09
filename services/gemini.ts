@@ -142,9 +142,14 @@ const runArchitectMode = async (
 
 const runFlashcardMode = async (ai: GoogleGenAI, analystSummary: string, topic: string) => {
     const prompt = `
-    Based on the following analysis of a math topic, generate a comprehensive set of 5-8 flashcards.
-    Each card should capture a key concept, formula, or theorem identified in the analysis.
-    
+    Based on the provided analysis, generate 5-8 "Deep Concept" flashcards.
+    DO NOT generate generic definitions (e.g., "What is a derivative?").
+    INSTEAD, generate specific application rules, "Gotchas", or conditions for using theorems.
+
+    Examples of Good Cards:
+    - Front: "Condition for using L'Hopital's Rule" -> Back: "Limit must be in indeterminate form 0/0 or infinity/infinity."
+    - Front: "Derivative of sin(2x) (Chain Rule)" -> Back: "cos(2x) * 2"
+
     ANALYST REPORT:
     ${analystSummary}
     
@@ -158,7 +163,7 @@ const runFlashcardMode = async (ai: GoogleGenAI, analystSummary: string, topic: 
             properties: {
                 id: { type: Type.INTEGER },
                 front: { type: Type.STRING, description: "The concept name or term" },
-                back: { type: Type.STRING, description: "The definition, formula, or concise explanation" },
+                back: { type: Type.STRING, description: "The definition, formula, or concise explanation. Use LaTeX for math." },
                 category: { type: Type.STRING, description: "The sub-topic (e.g. 'Calculus')" }
             },
             required: ["id", "front", "back", "category"]
@@ -180,9 +185,14 @@ const runFlashcardMode = async (ai: GoogleGenAI, analystSummary: string, topic: 
 
 const runQuizMode = async (ai: GoogleGenAI, analystSummary: string, topic: string, difficulty: number) => {
     const prompt = `
-    Generate a ${difficulty >= 4 ? 'challenging' : 'standard'} multiple-choice quiz (5 questions) based on the analysis below.
-    The questions should test deep understanding, not just memorization.
-    
+    Generate a ${difficulty >= 4 ? 'challenging' : 'standard'} multiple-choice quiz (5 questions).
+
+    CRITICAL FORMATTING RULES:
+    1. **Use LaTeX for ALL Math:** Every variable, number, or equation MUST be wrapped in '$' delimiters.
+       - Bad: "Find x where x^2 = 4"
+       - Good: "Find $x$ where $x^2 = 4$"
+    2. **Options:** The 4 options must also use LaTeX for math values.
+
     ANALYST REPORT:
     ${analystSummary}
     
@@ -196,10 +206,10 @@ const runQuizMode = async (ai: GoogleGenAI, analystSummary: string, topic: strin
             type: Type.OBJECT,
             properties: {
                 id: { type: Type.INTEGER },
-                question: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of 4 possible answers" },
+                question: { type: Type.STRING, description: "Question text with LaTeX math" },
+                options: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of 4 possible answers with LaTeX" },
                 correctAnswer: { type: Type.INTEGER, description: "Index of the correct answer (0-3)" },
-                explanation: { type: Type.STRING, description: "Explanation of why the answer is correct" }
+                explanation: { type: Type.STRING, description: "Explanation with LaTeX math" }
             },
             required: ["id", "question", "options", "correctAnswer", "explanation"]
         }
@@ -350,6 +360,10 @@ export const generateFlashcards = async (problemContext: string): Promise<Flashc
     Analyze the following math problem and solution.
     Identify 4-6 key concepts, theorems, formulas, or definitions that are critical to understanding this problem.
     Create a flashcard for each.
+    
+    RULES:
+    1. **Math:** ALWAYS use LaTeX for math expressions (e.g. $f(x) = x^2$).
+    2. **Clarity:** Keep definitions concise but rigorous.
     
     PROBLEM CONTEXT:
     ${problemContext}
