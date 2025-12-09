@@ -441,14 +441,20 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Footer Hints */}
+      {/* Footer Hints with Keyboard Shortcuts */}
       {!isReasoning && activeTab === 'calculo' && (
-          <button 
-            onClick={() => setShowDebug(prev => !prev)}
-            className="fixed bottom-4 right-4 z-50 p-2 text-xs font-mono text-slate-300 hover:text-slate-500 transition-colors bg-white/80 backdrop-blur rounded-lg border border-slate-200 shadow-sm"
-          >
-             Debug <Terminal size={12} className="inline mb-0.5" />
-          </button>
+          <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+            <button 
+              onClick={() => setShowDebug(prev => !prev)}
+              className="p-2 text-xs font-mono text-slate-300 hover:text-slate-500 transition-colors bg-white/80 backdrop-blur rounded-lg border border-slate-200 shadow-sm"
+              title="Ctrl/Cmd + . to toggle"
+            >
+               Debug <Terminal size={12} className="inline mb-0.5" />
+            </button>
+            <div className="text-[10px] font-mono text-slate-400 bg-white/60 backdrop-blur px-2 py-1 rounded border border-slate-200 shadow-sm">
+              <kbd className="font-bold">⌘.</kbd> Debug • <kbd className="font-bold">⌘H</kbd> History • <kbd className="font-bold">⌘↵</kbd> Generate
+            </div>
+          </div>
       )}
 
     </div>

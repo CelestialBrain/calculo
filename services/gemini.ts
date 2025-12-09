@@ -255,6 +255,26 @@ const runQuizMode = async (ai: GoogleGenAI, analystSummary: string, topic: strin
 
 // --- MAIN EXPORT ---
 
+/**
+ * Generate mathematical content based on mode (PROBLEM, FLASHCARDS, or QUIZ)
+ * 
+ * This is the main entry point for content generation. It uses a hybrid architecture:
+ * 1. Analyst Pass (Gemini Flash): Analyzes context and extracts key concepts
+ * 2. Generation Pass: Uses appropriate model based on mode
+ * 
+ * Features:
+ * - Automatic retry with exponential backoff
+ * - Topic-aware difficulty scaling
+ * - Progress callbacks for real-time updates
+ * - Comprehensive error handling
+ * 
+ * @param topic - The mathematical topic or concept to generate content for
+ * @param files - Optional context files (images, PDFs) to inform generation
+ * @param difficulty - Difficulty level (1-5): 1=Review, 2=Practice, 3=Challenge, 4=Advanced, 5=Olympiad
+ * @param mode - Generation mode: 'PROBLEM', 'FLASHCARDS', or 'QUIZ'
+ * @param onProgress - Optional callback for real-time progress updates
+ * @returns Partial MathProblemState with generated content and metadata
+ */
 export const generateMathContent = async (
   topic: string,
   files: FileData[],
