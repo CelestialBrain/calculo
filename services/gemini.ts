@@ -595,9 +595,10 @@ export const verifyProblem = async (
         if (response.text) {
             return JSON.parse(response.text);
         }
+        console.warn("Verification response was empty, assuming valid");
         return { isValid: true, issues: [] }; // Assume valid if verification fails
     } catch (error) {
-        console.error("Verification Error:", error);
+        console.warn("Verification failed, assuming valid:", error);
         return { isValid: true, issues: [] }; // Don't block on verification failure
     }
 };

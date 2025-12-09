@@ -5,13 +5,14 @@ interface ToastProps {
   message: string;
   type: 'success' | 'error' | 'info';
   onClose: () => void;
+  duration?: number; // Duration in milliseconds, default 3000
 }
 
-const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
+const Toast: React.FC<ToastProps> = ({ message, type, onClose, duration = 3000 }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, duration]);
 
   const styles = {
     success: {

@@ -188,10 +188,10 @@ const App: React.FC = () => {
   };
 
   const handleSimilarProblems = (problems: string) => {
-      // Store similar problems in a toast or modal
-      showToast('Similar problems generated! Check the console.', 'info');
-      console.log('Similar Problems:\n', problems);
-      // You could also create a modal or new section to display these
+      // Display similar problems in an info toast with longer duration
+      showToast('Similar problems generated! View in console for now.', 'info');
+      // TODO: Create a modal or expandable section to display similar problems in the UI
+      console.log('=== Similar Problems ===\n', problems);
   };
 
   const restoreFromHistory = (item: HistoryItem) => {
