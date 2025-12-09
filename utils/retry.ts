@@ -15,5 +15,6 @@ export const withRetry = async <T>(
       await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
     }
   }
+  // This line should never be reached, but TypeScript needs it for type safety
   throw new Error('Max retries exceeded');
 };

@@ -452,7 +452,15 @@ const App: React.FC = () => {
                Debug <Terminal size={12} className="inline mb-0.5" />
             </button>
             <div className="text-[10px] font-mono text-slate-400 bg-white/60 backdrop-blur px-2 py-1 rounded border border-slate-200 shadow-sm">
-              <kbd className="font-bold">⌘.</kbd> Debug • <kbd className="font-bold">⌘H</kbd> History • <kbd className="font-bold">⌘↵</kbd> Generate
+              {typeof navigator !== 'undefined' && navigator.platform?.includes('Mac') ? (
+                <>
+                  <kbd className="font-bold">⌘.</kbd> Debug • <kbd className="font-bold">⌘H</kbd> History • <kbd className="font-bold">⌘↵</kbd> Generate
+                </>
+              ) : (
+                <>
+                  <kbd className="font-bold">Ctrl+.</kbd> Debug • <kbd className="font-bold">Ctrl+H</kbd> History • <kbd className="font-bold">Ctrl+↵</kbd> Generate
+                </>
+              )}
             </div>
           </div>
       )}

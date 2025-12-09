@@ -116,9 +116,10 @@ const runArchitectMode = async (
     difficulty: number
 ) => {
     // Topic-aware difficulty scaling
-    const getDifficultyInstruction = (level: number, topicContext: string): string => {
+    const getDifficultyInstruction = (level: number, contextSummary: string): string => {
         // Detect mathematical domain from topic/context
-        const context = `${topic} ${topicContext}`.toLowerCase();
+        // We search both the user's topic and the analyst's summary for domain keywords
+        const context = `${topic} ${contextSummary}`.toLowerCase();
         const isCalculus = /calculus|derivative|integral|limit|continuity/i.test(context);
         const isAlgebra = /algebra|polynomial|equation|matrix|linear/i.test(context);
         const isGeometry = /geometry|triangle|circle|angle|area|volume/i.test(context);
